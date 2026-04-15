@@ -24,10 +24,10 @@
       "icon": ["icons/icon.ico"]
     },
     "updater": {
-      "active": false,
+      "active": true,
       "dialog": false,
-      "endpoints": [],
-      "pubkey": ""
+      "endpoints": ["https://github.com/ShreyPatel383/Cybeart-Peripheral-Software/releases/latest/download/latest.json"],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI3MjI2RkE0Qjk0REEwMjIKUldRaW9FMjVwRzhpdDJISk8rQ3pRVGdLdm9TQWFMYWtTTStRNWVheFJWcHJuNDVjeEVZU0U4QUUK"
     }
   }
 }
