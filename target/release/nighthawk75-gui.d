@@ -1,0 +1,1 @@
+C:\Users\Shrey\Documents\nighthawk75\target\release\nighthawk75-gui.exe: C:\Users\Shrey\Documents\nighthawk75\src\device.rs C:\Users\Shrey\Documents\nighthawk75\src\effects.rs C:\Users\Shrey\Documents\nighthawk75\src\gui.rs C:\Users\Shrey\Documents\nighthawk75\src\layout.rs

@@ -1,0 +1,12 @@
+C:\Users\Shrey\Documents\nighthawk75\target\release\deps\hidapi-96692904d47f615b.d: C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\lib.rs C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\error.rs C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\ffi.rs C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\hidapi.rs C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\hidapi\windows.rs C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\windows.rs
+
+C:\Users\Shrey\Documents\nighthawk75\target\release\deps\libhidapi-96692904d47f615b.rlib: C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\lib.rs C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\error.rs C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\ffi.rs C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\hidapi.rs C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\hidapi\windows.rs C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\windows.rs
+
+C:\Users\Shrey\Documents\nighthawk75\target\release\deps\libhidapi-96692904d47f615b.rmeta: C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\lib.rs C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\error.rs C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\ffi.rs C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\hidapi.rs C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\hidapi\windows.rs C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\windows.rs
+
+C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\lib.rs:
+C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\error.rs:
+C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\ffi.rs:
+C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\hidapi.rs:
+C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\hidapi\windows.rs:
+C:\Users\Shrey\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\hidapi-2.6.5\src\windows.rs:

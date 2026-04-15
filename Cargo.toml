@@ -1,0 +1,32 @@
+[package]
+name = "nighthawk75"
+version = "0.1.0"
+edition = "2021"
+description = "Custom driver for the NIGHTHAWK Gasket 75% Mechanical Keyboard"
+
+# CLI tool (no console window when built with --release on Windows)
+[[bin]]
+name = "nighthawk75"
+path = "src/main.rs"
+
+# GUI application
+[[bin]]
+name = "nighthawk75-gui"
+path = "src/gui.rs"
+
+[dependencies]
+hidapi = "2.6"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "1"
+eframe = "0.27"
+egui = "0.27"
+
+[profile.release]
+opt-level = 3
+
+# Suppress console window on Windows for the GUI binary
+[package.metadata]
+# Applied via build.rs below

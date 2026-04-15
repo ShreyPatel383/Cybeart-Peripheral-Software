@@ -1,0 +1,243 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at 60% 20%, #2a0008 0%, #09090c 45%, #050507 100%);
+  color: #f4f4f7;
+}
+
+.page {
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  min-height: 100vh;
+  background: radial-gradient(circle at 50% 15%, #1b0208 0%, #08080b 52%, #050507 100%);
+}
+
+.sidebar {
+  border-right: 1px solid #2a171d;
+  background: linear-gradient(160deg, #10070c, #06060a);
+  padding: 24px 16px;
+}
+
+.logo {
+  color: #ff2a42;
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+
+.group-title {
+  font-size: 11px;
+  color: #aa7c85;
+  margin: 16px 0 8px;
+}
+
+.menu {
+  width: 100%;
+  margin: 4px 0;
+  border: 1px solid #2f1d23;
+  background: #0f0c10;
+  color: #d5c7cb;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.menu.active {
+  border-color: #ff2a42;
+  color: #ff2a42;
+}
+
+.content {
+  padding: 20px 26px;
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.top h1 {
+  font-size: 13px;
+  letter-spacing: 0.8px;
+  color: #dddbe2;
+}
+
+.modes span {
+  margin-left: 16px;
+  font-size: 11px;
+  color: #95939d;
+}
+
+.modes .active {
+  color: #ffffff;
+}
+
+.keyboard-shell {
+  margin-top: 26px;
+  border: 1px solid #3d2129;
+  border-radius: 16px;
+  background: linear-gradient(170deg, #0d0d12, #120d14);
+  position: relative;
+  padding: 30px 24px 18px;
+  overflow: hidden;
+}
+
+.bat-mark {
+  position: absolute;
+  left: 50%;
+  top: 56%;
+  transform: translate(-50%, -50%);
+  width: 320px;
+  height: 90px;
+  background: radial-gradient(circle at center, #ff1e2f 0%, #c90f23 50%, transparent 80%);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.keyboard-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  opacity: 0.6;
+}
+
+.keyboard-light-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.keyboard-key-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+}
+
+.key-light {
+  border-radius: 999px;
+  filter: blur(0.4px) saturate(1.2);
+  opacity: 0.95;
+  mix-blend-mode: plus-lighter;
+}
+
+.key-ambient {
+  filter: blur(1px) saturate(1.08);
+  opacity: 0.25;
+}
+
+.keyboard-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 650 / 265;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.keyboard-overlay-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  object-position: center;
+  border-radius: 10px;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.97;
+  mix-blend-mode: normal;
+  filter: saturate(1.08) contrast(1.02);
+  transform: translate(0, 0) scaleX(1.006) scaleY(1.008);
+  transform-origin: top left;
+}
+
+.key {
+  z-index: 1;
+  border: 1px solid #3a2730;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 16, 22, 0.96);
+  color: #858792;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.absolute-key {
+  position: absolute;
+}
+
+.key.red {
+  background: rgba(147, 16, 31, 0.88);
+  color: #ffeef1;
+}
+
+.controls {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  background: rgba(10, 8, 11, 0.78);
+  border: 1px solid #2d1a21;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: #cac3c8;
+}
+
+.controls label.inline {
+  flex-direction: row;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.controls input,
+.controls select,
+.controls button {
+  background: #0d0b10;
+  color: #ecebf0;
+  border: 1px solid #3a2029;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.controls button {
+  margin-top: 16px;
+  cursor: pointer;
+}
+
+.status {
+  margin-top: 16px;
+  color: #ff4c5f;
+  min-width: 220px;
+}
+
+.tabs {
+  margin-top: 22px;
+  display: flex;
+  justify-content: space-around;
+  color: #b6b0ba;
+  border-top: 1px solid #2f1d23;
+  padding-top: 14px;
+  font-size: 12px;
+}
