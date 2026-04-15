@@ -7,7 +7,7 @@ mod layout;
 
 use anyhow::{anyhow, Result};
 use device::{brightness, speed, Effect, EffectParams, Keyboard, Rgb};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,6 +18,20 @@ struct LayoutKey {
     y1: u16,
     x2: u16,
     y2: u16
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PerKeyColorInput {
+    led_index: u8,
+    hex_color: String
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct KeyRebindInput {
+    from_led_index: u8,
+    to_led_index: u8
 }
 
 fn parse_effect(name: &str) -> Result<Effect> {
@@ -58,6 +72,13 @@ fn open_keyboard(wireless: bool) -> Result<Keyboard> {
     }
 }
 
+fn key_by_led_index(led_index: u8) -> Result<&'static layout::KeyInfo> {
+    layout::KEYS
+        .iter()
+        .find(|key| key.led_index == led_index)
+        .ok_or_else(|| anyhow!("Unknown LED index: {led_index}"))
+}
+
 #[tauri::command]
 fn apply_effect(
     effect: String,
@@ -95,6 +116,34 @@ fn apply_preset(preset: String, wireless: bool) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn apply_per_key_rgb(key_colors: Vec<PerKeyColorInput>, wireless: bool) -> Result<(), String> {
+    let keyboard = open_keyboard(wireless).map_err(|e| e.to_string())?;
+    let mut led_map = [Rgb::OFF; 96];
+
+    for entry in key_colors {
+        let color = parse_hex_rgb(&entry.hex_color).map_err(|e| e.to_string())?;
+        let idx = entry.led_index as usize;
+        if idx >= led_map.len() {
+            return Err(format!("LED index out of range: {}", entry.led_index));
+        }
+        led_map[idx] = color;
+    }
+
+    keyboard.set_per_key_rgb(&led_map).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn remap_key_binding(binding: KeyRebindInput, wireless: bool) -> Result<(), String> {
+    let keyboard = open_keyboard(wireless).map_err(|e| e.to_string())?;
+    let from_key = key_by_led_index(binding.from_led_index).map_err(|e| e.to_string())?;
+    let to_key = key_by_led_index(binding.to_led_index).map_err(|e| e.to_string())?;
+
+    keyboard
+        .remap_key(from_key.led_index, to_key.vk)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn ping() -> String {
     "ok".to_string()
 }
@@ -117,7 +166,14 @@ fn get_layout_keys() -> Vec<LayoutKey> {
 
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![apply_effect, apply_preset, ping, get_layout_keys])
+        .invoke_handler(tauri::generate_handler![
+            apply_effect,
+            apply_preset,
+            apply_per_key_rgb,
+            remap_key_binding,
+            ping,
+            get_layout_keys
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

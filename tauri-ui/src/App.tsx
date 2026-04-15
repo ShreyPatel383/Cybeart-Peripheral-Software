@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/tauri";
 import { checkUpdate, installUpdate } from "@tauri-apps/api/updater";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import cybeartLogo from "./assets/cybeart-logo.png";
+import keyboardDeviceImage from "./assets/keyboard-batman-transparent.png";
 import keyboardOverlay from "./assets/keyboard-batman-transparent.png";
 
 type EffectName =
@@ -15,6 +17,7 @@ type EffectName =
   | "Rotating"
   | "Waterfall"
   | "FlashAway"
+  | "PerKeyRgb"
   | "Off";
 
 const effects: EffectName[] = [
@@ -29,8 +32,10 @@ const effects: EffectName[] = [
   "Rotating",
   "Waterfall",
   "FlashAway",
+  "PerKeyRgb",
   "Off"
 ];
+const effectLabel = (effectName: EffectName) => effectName === "PerKeyRgb" ? "Per Key RGB" : effectName;
 
 type LayoutKey = {
   name: string;
@@ -47,6 +52,10 @@ type KeyOffset = {
 };
 
 type Rgb = { r: number; g: number; b: number };
+type PointerPosition = { x: number; y: number };
+type PerKeyColor = { ledIndex: number; hexColor: string };
+type AppView = "devices" | "lighting";
+type KeyRemapMap = Record<number, number>;
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const rgbToCss = (c: Rgb, a = 1) => `rgba(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)}, ${clamp01(a)})`;
@@ -75,6 +84,12 @@ const hsvToRgb = (h: number, s: number, v: number): Rgb => {
   return { r: r * 255, g: g * 255, b: b * 255 };
 };
 const mulRgb = (c: Rgb, k: number): Rgb => ({ r: c.r * k, g: c.g * k, b: c.b * k });
+const normalizeHex = (value: string) => {
+  const trimmed = value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed.toLowerCase();
+  if (/^[0-9a-fA-F]{6}$/.test(trimmed)) return `#${trimmed.toLowerCase()}`;
+  return "#ff1e2f";
+};
 const hash01 = (a: number, b: number) => {
   let x = (a * 1664525 + b * 1013904223) >>> 0;
   x ^= x >>> 15;
@@ -195,6 +210,7 @@ const EDGE_OCCLUSION_ENABLED = false;
 const LIGHT_EDGE_INSET_PCT = 0.8;
 const KEY_BOX_WIDTH_SCALE = 1.08;
 const KEY_BOX_WIDTH_SCALE_OVERRIDES: Record<string, number> = { Space: 1 };
+const MATRIX_CHARS = "01アイウエオカキクケコサシスセソZXCVBNM";
 
 function renderedKeyBoxRect(k: LayoutKey, offsets: Record<number, KeyOffset>): RenderKeyRectPct {
   const rect = renderedKeyRect(k, offsets);
@@ -332,6 +348,7 @@ function buildEdgeLightSegments(
 
 function App() {
   const [effect, setEffect] = useState<EffectName>("Static");
+  const [activeView, setActiveView] = useState<AppView>("devices");
   const [hex, setHex] = useState("#ff1e2f");
   const [brightness, setBrightness] = useState(4);
   const [speed, setSpeed] = useState(2);
@@ -339,14 +356,14 @@ function App() {
   const [randomColor, setRandomColor] = useState(false);
   const layoutOffsetX = -0.1;
   const layoutOffsetY = 0.85;
-  const layoutScale = 99.1;
+  const layoutScale = 93.8;
   const layoutScaleX = 100;
   const layoutScaleY = 100;
   const layoutPadding = 0.6;
   const imageOffsetX = 0;
   const imageOffsetY = 0;
-  const imageScaleX = 100;
-  const imageScaleY = 100;
+  const imageScaleX = 94.6;
+  const imageScaleY = 94.6;
   const [layoutKeys, setLayoutKeys] = useState<LayoutKey[]>([]);
   const editMode = false;
   const [activeKeyId, setActiveKeyId] = useState<number | null>(null);
@@ -357,6 +374,60 @@ function App() {
   const lightBlurPx = DEFAULT_LIGHT_BLUR_PX;
   const [status, setStatus] = useState("Disconnected");
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const perKeyPaintModeRef = useRef<"paint" | "erase" | null>(null);
+  const [pointerPos, setPointerPos] = useState<PointerPosition | null>(null);
+  const [showBoot, setShowBoot] = useState(true);
+  const [perKeyColors, setPerKeyColors] = useState<Record<number, string>>({});
+  const [remapBindings, setRemapBindings] = useState<KeyRemapMap>({});
+  const [showRebindPrompt, setShowRebindPrompt] = useState(false);
+  const [showRebindKeyboard, setShowRebindKeyboard] = useState(false);
+  const [rebindTargetKeyId, setRebindTargetKeyId] = useState<number | null>(null);
+  const bgDots = useMemo(
+    () => {
+      const columns = 28;
+      const rows = 15;
+      const xInset = 1.2;
+      const yInset = 1.6;
+      const xStep = (100 - xInset * 2) / (columns - 1);
+      const yStep = (100 - yInset * 2) / (rows - 1);
+
+      return Array.from({ length: columns * rows }, (_, i) => ({
+        id: i,
+        leftPct: xInset + (i % columns) * xStep,
+        topPct: yInset + Math.floor(i / columns) * yStep
+      }));
+    },
+    []
+  );
+  const bootColumns = useMemo(
+    () =>
+      Array.from({ length: 14 }, (_, i) => {
+        const length = 10 + (i % 4);
+        const glyphs = Array.from({ length }, (_, j) => MATRIX_CHARS[(i * 7 + j * 5) % MATRIX_CHARS.length]).join("");
+        return {
+          id: i,
+          left: 4 + i * 7.1,
+          delay: (i % 5) * 0.12,
+          duration: 1.1 + (i % 4) * 0.2,
+          glyphs
+        };
+      }),
+    []
+  );
+  const devices = useMemo(
+    () => [
+      {
+        id: "nighthawk75",
+        name: "Cybeart Nighthawk 75",
+        description: "The Batman edition mechanical keyboard",
+        image: keyboardDeviceImage,
+        connection: wireless ? "Wireless profile ready" : "USB connected",
+        status: "Online"
+      }
+    ],
+    [wireless]
+  );
 
   const keyboardGlow = useMemo(
     () => ({ boxShadow: `0 0 32px ${hex}55, 0 0 8px ${hex}` }),
@@ -380,8 +451,40 @@ function App() {
     return () => cancelAnimationFrame(raf);
   }, []);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShowBoot(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (layoutKeys.length === 0) return;
+    setPerKeyColors((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const key of layoutKeys) {
+        if (!next[key.ledIndex]) {
+          next[key.ledIndex] = normalizeHex(hex);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [layoutKeys, hex]);
+
   const applyEffect = async () => {
     try {
+      if (effect === "PerKeyRgb") {
+        const keyColors: PerKeyColor[] = layoutKeys.map((key) => ({
+          ledIndex: key.ledIndex,
+          hexColor: normalizeHex(perKeyColors[key.ledIndex] ?? hex)
+        }));
+        await invoke("apply_per_key_rgb", {
+          keyColors,
+          wireless
+        });
+        setStatus("Applied Per Key RGB");
+        return;
+      }
       await invoke("apply_effect", {
         effect,
         hexColor: hex,
@@ -467,10 +570,136 @@ function App() {
     setActiveKeyId(null);
   };
 
+  const selectedPerKeyHex = activeKeyId !== null ? normalizeHex(perKeyColors[activeKeyId] ?? hex) : normalizeHex(hex);
+  const activeLayoutKey = activeKeyId !== null ? layoutKeys.find((key) => key.ledIndex === activeKeyId) ?? null : null;
+  const rebindTargetKey = rebindTargetKeyId !== null ? layoutKeys.find((key) => key.ledIndex === rebindTargetKeyId) ?? null : null;
+  const remappedKeys = useMemo(
+    () =>
+      Object.entries(remapBindings)
+        .map(([fromLed, toLed]) => {
+          const fromKey = layoutKeys.find((key) => key.ledIndex === Number(fromLed));
+          const toKey = layoutKeys.find((key) => key.ledIndex === toLed);
+          if (!fromKey || !toKey) return null;
+          return {
+            fromLed: Number(fromLed),
+            toLed,
+            fromName: fromKey.name,
+            toName: toKey.name
+          };
+        })
+        .filter((item): item is { fromLed: number; toLed: number; fromName: string; toName: string } => item !== null),
+    [remapBindings, layoutKeys]
+  );
+
+  const applyColorToSelectedKey = (nextHex: string) => {
+    if (activeKeyId === null) return;
+    const normalized = normalizeHex(nextHex);
+    setPerKeyColors((prev) => ({
+      ...prev,
+      [activeKeyId]: normalized
+    }));
+  };
+
+  const fillAllKeysWithColor = (nextHex: string) => {
+    const normalized = normalizeHex(nextHex);
+    setPerKeyColors(
+      Object.fromEntries(layoutKeys.map((key) => [key.ledIndex, normalized]))
+    );
+  };
+
+  const clearPerKeyColors = () => {
+    fillAllKeysWithColor("#000000");
+  };
+
+  const paintKey = (ledIndex: number, nextHex: string) => {
+    const normalized = normalizeHex(nextHex);
+    setPerKeyColors((prev) => {
+      if (prev[ledIndex] === normalized) return prev;
+      return {
+        ...prev,
+        [ledIndex]: normalized
+      };
+    });
+  };
+
+  const stopPerKeyPainting = useCallback(() => {
+    perKeyPaintModeRef.current = null;
+  }, []);
+
+  const closeRebindFlow = useCallback(() => {
+    setShowRebindPrompt(false);
+    setShowRebindKeyboard(false);
+    setRebindTargetKeyId(null);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("pointerup", stopPerKeyPainting);
+    return () => window.removeEventListener("pointerup", stopPerKeyPainting);
+  }, [stopPerKeyPainting]);
+
+  const startPerKeyPaint = (event: React.PointerEvent, key: LayoutKey) => {
+    if (effect !== "PerKeyRgb") return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const mode = event.button === 2 ? "erase" : "paint";
+    perKeyPaintModeRef.current = mode;
+    setActiveKeyId(key.ledIndex);
+    paintKey(key.ledIndex, mode === "erase" ? "#000000" : hex);
+  };
+
+  const continuePerKeyPaint = (key: LayoutKey) => {
+    if (effect !== "PerKeyRgb" || perKeyPaintModeRef.current === null) return;
+    setActiveKeyId(key.ledIndex);
+    paintKey(key.ledIndex, perKeyPaintModeRef.current === "erase" ? "#000000" : hex);
+  };
+
+  const startRebindFlow = (key: LayoutKey) => {
+    setActiveKeyId(key.ledIndex);
+    setRebindTargetKeyId(key.ledIndex);
+    setShowRebindPrompt(true);
+    setShowRebindKeyboard(false);
+  };
+
+  const openRebindKeyboard = () => {
+    setShowRebindPrompt(false);
+    setShowRebindKeyboard(true);
+  };
+
+  const selectRebindSourceKey = (sourceKey: LayoutKey) => {
+    if (!rebindTargetKey) return;
+    invoke("remap_key_binding", {
+      binding: {
+        fromLedIndex: rebindTargetKey.ledIndex,
+        toLedIndex: sourceKey.ledIndex
+      },
+      wireless
+    })
+      .then(() => {
+        setRemapBindings((prev) => {
+          const next = { ...prev };
+          if (rebindTargetKey.ledIndex === sourceKey.ledIndex) {
+            delete next[rebindTargetKey.ledIndex];
+          } else {
+            next[rebindTargetKey.ledIndex] = sourceKey.ledIndex;
+          }
+          return next;
+        });
+        setStatus(`Rebound ${rebindTargetKey.name} to ${sourceKey.name}`);
+      })
+      .catch((error) => {
+        setStatus(String(error));
+      })
+      .finally(() => {
+        closeRebindFlow();
+      });
+  };
+
   const getPreviewColor = useCallback((k: LayoutKey): Rgb => {
     const nx = k.x1 / 650;
     const ny = k.y1 / 265;
     const base = hexToRgb(hex);
+    const perKeyBase = hexToRgb(normalizeHex(perKeyColors[k.ledIndex] ?? hex));
     const speedFactor = 0.4 + speed * 0.35;
     const brightnessFactor = (brightness + 3) / 5;
     const t = previewT * speedFactor;
@@ -480,6 +709,8 @@ function App() {
         return { r: 0, g: 0, b: 0 };
       case "Static":
         return mulRgb(base, brightnessFactor);
+      case "PerKeyRgb":
+        return mulRgb(perKeyBase, brightnessFactor);
       case "Breathing": {
         const p = (Math.sin(t * Math.PI * 2 * 0.7) + 1) / 2;
         return mulRgb(base, p * brightnessFactor);
@@ -583,171 +814,419 @@ function App() {
       default:
         return mulRgb(base, brightnessFactor);
     }
-  }, [previewT, effect, hex, brightness, speed, randomColor, layoutKeys]);
+  }, [previewT, effect, hex, brightness, speed, randomColor, layoutKeys, perKeyColors]);
 
   const edgeLights = useMemo(
     () => buildEdgeLightSegments(layoutKeys, keyOffsets, getPreviewColor, lightWidthScale, lightThicknessRatio),
     [layoutKeys, keyOffsets, getPreviewColor, lightWidthScale, lightThicknessRatio]
   );
 
+  const handlePagePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!pageRef.current) return;
+    const rect = pageRef.current.getBoundingClientRect();
+    setPointerPos({
+      x: ((event.clientX - rect.left) / rect.width) * 100,
+      y: ((event.clientY - rect.top) / rect.height) * 100
+    });
+  };
+
+  const handlePagePointerLeave = () => {
+    setPointerPos(null);
+  };
+
   return (
-    <div className="page">
+    <div
+      className="page"
+      ref={pageRef}
+      onPointerMove={handlePagePointerMove}
+      onPointerLeave={handlePagePointerLeave}
+    >
+      {showBoot && (
+        <div className="boot-sequence" aria-hidden="true">
+          <div className="boot-rain">
+            {bootColumns.map((column) => (
+              <span
+                key={column.id}
+                className="boot-stream"
+                style={{
+                  left: `${column.left}%`,
+                  animationDelay: `${column.delay}s`,
+                  animationDuration: `${column.duration}s`
+                }}
+              >
+                {column.glyphs}
+              </span>
+            ))}
+          </div>
+          <div className="boot-scanline" />
+          <div className="boot-center">
+            <img src={cybeartLogo} alt="" className="boot-logo" />
+            <div className="boot-title">CYBEART CONTROL MATRIX</div>
+            <div className="boot-subtitle">SYSTEM ONLINE</div>
+          </div>
+        </div>
+      )}
+      <div className="bg-dot-layer" aria-hidden="true">
+        {bgDots.map((dot) => (
+          (() => {
+            const dx = pointerPos ? dot.leftPct - pointerPos.x : Infinity;
+            const dy = pointerPos ? dot.topPct - pointerPos.y : Infinity;
+            const distance = Math.hypot(dx, dy);
+            const glowRadius = 14;
+            const glowStrength = pointerPos ? Math.max(0, 1 - distance / glowRadius) : 0;
+            const scale = 1 + glowStrength * 1.65;
+            const opacity = 0.34 + glowStrength * 0.62;
+            const haloSize = 4 + glowStrength * 20;
+            const coreColor = `rgba(${255 - glowStrength * 12}, ${154 + glowStrength * 56}, ${165 + glowStrength * 42}, ${0.5 + glowStrength * 0.45})`;
+            const glowColor = `rgba(255, ${86 + glowStrength * 80}, ${106 + glowStrength * 42}, ${0.1 + glowStrength * 0.5})`;
+
+            return (
+              <span
+                key={dot.id}
+                className="bg-dot"
+                style={{
+                  left: `${dot.leftPct}%`,
+                  top: `${dot.topPct}%`,
+                  opacity,
+                  transform: `translateZ(0) scale(${scale})`,
+                  background: `radial-gradient(circle at 35% 35%, ${coreColor}, rgba(145, 97, 104, ${0.72 + glowStrength * 0.12}) 72%, rgba(76, 41, 48, ${0.56 + glowStrength * 0.18}) 100%)`,
+                  boxShadow: `0 0 ${haloSize}px ${glowColor}, 0 0 ${haloSize * 1.7}px rgba(255, 70, 92, ${glowStrength * 0.22})`
+                }}
+              />
+            );
+          })()
+        ))}
+      </div>
       <aside className="sidebar">
-        <div className="logo">NIGHTHAWK 75</div>
-        <div className="group-title">KEY ASSIGNMENT</div>
-        <button className="menu active">KEYBOARD</button>
-        <div className="group-title">PROFILE</div>
-        <button className="menu">PROFILE 1</button>
-        <button className="menu">PROFILE 2</button>
-        <button className="menu">PROFILE 3</button>
-        <button className="menu">PROFILE 4</button>
+        <div className="logo">
+          <img src={cybeartLogo} alt="Cybeart" className="logo-image" />
+        </div>
+        <div className="group-title">DEVICE HUB</div>
+        <button className={`menu ${activeView === "devices" ? "active" : ""}`} onClick={() => setActiveView("devices")}>
+          DEVICES
+        </button>
+        {activeView === "lighting" && (
+          <>
+            <div className="group-title">CONTROL</div>
+            <button className={`menu ${activeView === "lighting" ? "active" : ""}`} onClick={() => setActiveView("lighting")}>
+              LIGHTING
+            </button>
+          </>
+        )}
       </aside>
 
       <main className="content">
-        <header className="top">
-          <h1>CYBEART NIGHTHAWK 75 - THE BATMAN</h1>
-          <div className="modes">
-            <span className="active">DEFAULT</span>
-            <span>FN1</span>
-            <span>FN2</span>
-            <span>TAP</span>
-          </div>
-        </header>
+        {activeView === "devices" ? (
+          <>
+            <header className="top devices-top">
+              <h1>DEVICES</h1>
+              <div className="modes">
+                <span className="active">DETECTED</span>
+                <span>READY</span>
+              </div>
+            </header>
 
-        <section className="keyboard-shell" style={keyboardGlow}>
-          <div className="bat-mark" />
-          <div className="keyboard-stage" ref={stageRef}>
-            <div
-              className="keyboard-grid"
-              style={{
-                top: `${layoutPadding}%`,
-                right: `${layoutPadding}%`,
-                bottom: `${layoutPadding}%`,
-                left: `${layoutPadding}%`,
-                transform: `translate(${layoutOffsetX}%, ${layoutOffsetY}%) scale(${layoutScale / 100}) scaleX(${layoutScaleX / 100}) scaleY(${layoutScaleY / 100})`,
-                transformOrigin: "top left"
-              }}
-            >
-              <div
-                className="keyboard-light-layer"
-                style={{
-                  maskImage: `url(${keyboardOverlay})`,
-                  maskSize: "100% 100%",
-                  maskRepeat: "no-repeat",
-                  WebkitMaskImage: `url(${keyboardOverlay})`,
-                  WebkitMaskSize: "100% 100%",
-                  WebkitMaskRepeat: "no-repeat"
+            <section className="devices-hero">
+              <div>
+                <div className="devices-kicker">CYBEART CONTROL CENTER</div>
+                <h2>Select a device to open lighting controls.</h2>
+                <p>Your connected gear appears here in a softer grid so you can jump straight into customization.</p>
+              </div>
+            </section>
+
+            <section className="device-grid">
+              {devices.map((device) => (
+                <button
+                  key={device.id}
+                  className="device-card"
+                  onClick={() => setActiveView("lighting")}
+                >
+                  <div className="device-card-image-wrap">
+                    <img src={device.image} alt={device.name} className="device-card-image" />
+                  </div>
+                  <div className="device-card-meta">
+                    <div className="device-card-row">
+                      <h3>{device.name}</h3>
+                      <span className="device-pill">{device.status}</span>
+                    </div>
+                    <p>{device.description}</p>
+                    <div className="device-card-footer">
+                      <span>{device.connection}</span>
+                      <span>Open Lighting</span>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </section>
+          </>
+        ) : (
+          <>
+            <header className="top">
+              <h1>CYBEART NIGHTHAWK 75 - THE BATMAN</h1>
+              <div className="modes">
+                <span className="active">LIGHTING</span>
+                <span>FN1</span>
+                <span>FN2</span>
+                <span>TAP</span>
+              </div>
+            </header>
+
+            <section className="keyboard-shell" style={keyboardGlow}>
+              <div className="bat-mark" />
+              <div className="keyboard-stage" ref={stageRef}>
+                <div
+                  className="keyboard-grid"
+                  style={{
+                    top: `${layoutPadding}%`,
+                    right: `${layoutPadding}%`,
+                    bottom: `${layoutPadding}%`,
+                    left: `${layoutPadding}%`,
+                    transform: `translate(${layoutOffsetX}%, ${layoutOffsetY}%) scale(${layoutScale / 100}) scaleX(${layoutScaleX / 100}) scaleY(${layoutScaleY / 100})`,
+                    transformOrigin: "top left"
+                  }}
+                >
+                  <div
+                    className="keyboard-light-layer"
+                    style={{
+                      maskImage: `url(${keyboardOverlay})`,
+                      maskSize: "100% 100%",
+                      maskRepeat: "no-repeat",
+                      WebkitMaskImage: `url(${keyboardOverlay})`,
+                      WebkitMaskSize: "100% 100%",
+                      WebkitMaskRepeat: "no-repeat"
+                    }}
+                  >
+                    {edgeLights.map((seg, i) => {
+                      const clampedLeft = Math.max(LIGHT_EDGE_INSET_PCT, seg.x);
+                      const clampedTop = Math.max(LIGHT_EDGE_INSET_PCT, seg.y);
+                      const clampedW = Math.max(0, Math.min(seg.w, 100 - LIGHT_EDGE_INSET_PCT - clampedLeft));
+                      const clampedH = Math.max(0, Math.min(seg.h, 100 - LIGHT_EDGE_INSET_PCT - clampedTop));
+                      return (
+                        <div
+                          key={`gap-light-${i}`}
+                          className="key-light absolute-key gap-light"
+                          style={{
+                            left: `${clampedLeft}%`,
+                            top: `${clampedTop}%`,
+                            width: `${clampedW}%`,
+                            height: `${clampedH}%`,
+                            background: rgbToCss(seg.color, 0.78),
+                            boxShadow: `0 0 20px ${rgbToCss(seg.color, 0.9)}`,
+                            filter: `blur(${lightBlurPx}px) saturate(1.2)`
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <div
+                    className="keyboard-key-layer"
+                    onContextMenu={(event) => {
+                      if (effect === "PerKeyRgb") event.preventDefault();
+                    }}
+                  >
+                    {layoutKeys.map((k) => {
+                      const rect = renderedKeyBoxRect(k, keyOffsets);
+                      const previewColor = getPreviewColor(k);
+                      return (
+                        <div
+                          key={`${k.ledIndex}-${k.name}`}
+                          className={`key absolute-key ${k.name === "Esc" && effect !== "PerKeyRgb" ? "red" : ""}`}
+                          style={{
+                            left: `${rect.left}%`,
+                            top: `${rect.top}%`,
+                            width: `${rect.right - rect.left}%`,
+                            height: `${rect.bottom - rect.top}%`,
+                            cursor: editMode ? "grab" : effect === "PerKeyRgb" ? "pointer" : "default",
+                            outline: activeKeyId === k.ledIndex ? "1px solid #ff4558" : undefined,
+                            background: effect === "PerKeyRgb" ? rgbToCss(previewColor, 0.22) : undefined,
+                            boxShadow: effect === "PerKeyRgb" ? `inset 0 0 0 1px ${rgbToCss(previewColor, 0.35)}` : undefined
+                          }}
+                          onPointerDown={(e) => {
+                            if (effect === "PerKeyRgb") {
+                              startPerKeyPaint(e, k);
+                              return;
+                            }
+                            startKeyDrag(e, k);
+                          }}
+                          onPointerEnter={() => continuePerKeyPaint(k)}
+                          onClick={() => {
+                            setActiveKeyId(k.ledIndex);
+                            if (effect === "PerKeyRgb") {
+                              paintKey(k.ledIndex, perKeyColors[k.ledIndex] ?? hex);
+                              return;
+                            }
+                            startRebindFlow(k);
+                          }}
+                        >
+                          {k.name}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {showRebindPrompt && activeLayoutKey && effect !== "PerKeyRgb" && (
+                    (() => {
+                      const rect = renderedKeyBoxRect(activeLayoutKey, keyOffsets);
+                      const popupLeft = Math.min(82, Math.max(2, rect.left + (rect.right - rect.left) / 2));
+                      const popupTop = Math.max(1.5, rect.top - 11.5);
+                      return (
+                        <div
+                          className="key-rebind-popover"
+                          style={{
+                            left: `${popupLeft}%`,
+                            top: `${popupTop}%`
+                          }}
+                        >
+                          <div className="key-rebind-title">Rebind key?</div>
+                          <div className="key-rebind-actions">
+                            <button onClick={openRebindKeyboard}>Rebind</button>
+                            <button className="ghost-button" onClick={closeRebindFlow}>Cancel</button>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  )}
+                </div>
+                <img
+                  src={keyboardOverlay}
+                  className="keyboard-overlay-image"
+                  style={{
+                    transform: `translate(${imageOffsetX}%, ${imageOffsetY}%) scaleX(${imageScaleX / 100}) scaleY(${imageScaleY / 100})`
+                  }}
+                  alt="Keyboard overlay"
+                />
+              </div>
+            </section>
+
+            <section className="controls">
+              <label>
+                Effect
+                <select value={effect} onChange={(e) => setEffect(e.target.value as EffectName)}>
+                  {effects.map((item) => (
+                    <option key={item} value={item}>
+                      {effectLabel(item)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Color
+                <input type="color" value={hex} onChange={(e) => setHex(e.target.value)} />
+              </label>
+              {effect === "PerKeyRgb" && (
+                <label>
+                  Selected Key Color
+                  <input
+                    type="color"
+                    value={selectedPerKeyHex}
+                    onChange={(e) => applyColorToSelectedKey(e.target.value)}
+                    disabled={activeKeyId === null}
+                  />
+                </label>
+              )}
+              <label>
+                Brightness
+                <input type="range" min={0} max={4} value={brightness} onChange={(e) => setBrightness(Number(e.target.value))} />
+              </label>
+              <label>
+                Speed
+                <input type="range" min={0} max={4} value={speed} onChange={(e) => setSpeed(Number(e.target.value))} />
+              </label>
+              <label className="inline">
+                <input type="checkbox" checked={wireless} onChange={(e) => setWireless(e.target.checked)} />
+                Wireless
+              </label>
+              <label className="inline">
+                <input
+                  type="checkbox"
+                  checked={randomColor}
+                  onChange={(e) => setRandomColor(e.target.checked)}
+                />
+                Rainbow RGB mode
+              </label>
+
+              <button onClick={applyEffect}>Apply Effect</button>
+              <button onClick={checkForUpdates}>Check for Updates</button>
+              <button onClick={resetActiveKey} disabled={activeKeyId === null}>Reset Selected Key</button>
+              <button onClick={resetAllKeys}>Reset All Key Offsets</button>
+              {effect === "PerKeyRgb" && (
+                <button onClick={() => fillAllKeysWithColor(hex)}>
+                  Fill All Keys
+                </button>
+              )}
+              {effect === "PerKeyRgb" && (
+                <button onClick={clearPerKeyColors}>
+                  Clear Per-Key Colors
+                </button>
+              )}
+              <button onClick={() => applyPreset("gaming")}>Gaming Preset</button>
+              <button onClick={() => applyPreset("rainbow")}>Rainbow Preset</button>
+              <div className="status">{status}</div>
+            </section>
+
+            <footer className="tabs">
+              <span>MOUSE</span>
+              <button
+                type="button"
+                className={`tab-button ${showRebindKeyboard ? "active" : ""}`}
+                onClick={() => {
+                  setShowRebindPrompt(false);
+                  setShowRebindKeyboard((prev) => !prev);
+                  setRebindTargetKeyId(null);
                 }}
               >
-                {edgeLights.map((seg, i) => {
-                  const clampedLeft = Math.max(LIGHT_EDGE_INSET_PCT, seg.x);
-                  const clampedTop = Math.max(LIGHT_EDGE_INSET_PCT, seg.y);
-                  const clampedW = Math.max(0, Math.min(seg.w, 100 - LIGHT_EDGE_INSET_PCT - clampedLeft));
-                  const clampedH = Math.max(0, Math.min(seg.h, 100 - LIGHT_EDGE_INSET_PCT - clampedTop));
-                  return (
-                    <div
-                      key={`gap-light-${i}`}
-                      className="key-light absolute-key gap-light"
-                      style={{
-                        left: `${clampedLeft}%`,
-                        top: `${clampedTop}%`,
-                        width: `${clampedW}%`,
-                        height: `${clampedH}%`,
-                        background: rgbToCss(seg.color, 0.78),
-                        boxShadow: `0 0 20px ${rgbToCss(seg.color, 0.9)}`,
-                        filter: `blur(${lightBlurPx}px) saturate(1.2)`
-                      }}
-                    />
-                  );
-                })}
-              </div>
-              <div className="keyboard-key-layer">
-                {layoutKeys.map((k) => {
-                  const rect = renderedKeyBoxRect(k, keyOffsets);
-                  return (
-                    <div
-                      key={`${k.ledIndex}-${k.name}`}
-                      className={`key absolute-key ${k.name === "Esc" ? "red" : ""}`}
-                      style={{
-                        left: `${rect.left}%`,
-                        top: `${rect.top}%`,
-                        width: `${rect.right - rect.left}%`,
-                        height: `${rect.bottom - rect.top}%`,
-                        cursor: editMode ? "grab" : "default",
-                        outline: activeKeyId === k.ledIndex ? "1px solid #00d9ff" : undefined
-                      }}
-                      onPointerDown={(e) => startKeyDrag(e, k)}
-                      onClick={() => setActiveKeyId(k.ledIndex)}
-                    >
-                      {k.name}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            <img
-              src={keyboardOverlay}
-              className="keyboard-overlay-image"
-              style={{
-                transform: `translate(${imageOffsetX}%, ${imageOffsetY}%) scaleX(${imageScaleX / 100}) scaleY(${imageScaleY / 100})`
-              }}
-              alt="Keyboard overlay"
-            />
-          </div>
-        </section>
+                KEYBOARD
+              </button>
+              <span>MultiMedia</span>
+              <span>Macros</span>
+              <span>Commands</span>
+            </footer>
 
-        <section className="controls">
-          <label>
-            Effect
-            <select value={effect} onChange={(e) => setEffect(e.target.value as EffectName)}>
-              {effects.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Color
-            <input type="color" value={hex} onChange={(e) => setHex(e.target.value)} />
-          </label>
-          <label>
-            Brightness
-            <input type="range" min={0} max={4} value={brightness} onChange={(e) => setBrightness(Number(e.target.value))} />
-          </label>
-          <label>
-            Speed
-            <input type="range" min={0} max={4} value={speed} onChange={(e) => setSpeed(Number(e.target.value))} />
-          </label>
-          <label className="inline">
-            <input type="checkbox" checked={wireless} onChange={(e) => setWireless(e.target.checked)} />
-            Wireless
-          </label>
-          <label className="inline">
-            <input
-              type="checkbox"
-              checked={randomColor}
-              onChange={(e) => setRandomColor(e.target.checked)}
-            />
-            Rainbow RGB mode
-          </label>
-
-          <button onClick={applyEffect}>Apply Effect</button>
-          <button onClick={checkForUpdates}>Check for Updates</button>
-          <button onClick={resetActiveKey} disabled={activeKeyId === null}>Reset Selected Key</button>
-          <button onClick={resetAllKeys}>Reset All Key Offsets</button>
-          <button onClick={() => applyPreset("gaming")}>Gaming Preset</button>
-          <button onClick={() => applyPreset("rainbow")}>Rainbow Preset</button>
-          <div className="status">{status}</div>
-        </section>
-
-        <footer className="tabs">
-          <span>MOUSE</span>
-          <span>KEYBOARD</span>
-          <span>KEYBOARD</span>
-          <span>KEYBOARD</span>
-          <span>KEYBOARD</span>
-        </footer>
+            {showRebindKeyboard && (
+              <section className="rebind-drawer">
+                <div className="rebind-drawer-header">
+                  <div className="modal-kicker">KEYBOARD</div>
+                  <button className="ghost-button rebind-drawer-close" onClick={closeRebindFlow}>Close</button>
+                </div>
+                <p className="rebind-keyboard-subtitle">
+                  {rebindTargetKey ? `Choose a new binding for ${rebindTargetKey.name}` : "Current remapped keys"}
+                </p>
+                <div className="remap-summary">
+                  {remappedKeys.length > 0 ? (
+                    remappedKeys.map((item) => (
+                      <div key={`${item.fromLed}-${item.toLed}`} className="remap-chip">
+                        <span>{item.fromName}</span>
+                        <span>{item.toName}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="remap-empty">No keys are currently remapped.</div>
+                  )}
+                </div>
+                <div className="rebind-keyboard-stage">
+                  {layoutKeys.map((key) => {
+                    const rect = renderedKeyBoxRect(key, {});
+                    const isTarget = key.ledIndex === rebindTargetKeyId;
+                    return (
+                      <button
+                        key={`rebind-${key.ledIndex}`}
+                        className={`rebind-key ${isTarget ? "selected" : ""}`}
+                        style={{
+                          left: `${rect.left}%`,
+                          top: `${rect.top}%`,
+                          width: `${rect.right - rect.left}%`,
+                          height: `${rect.bottom - rect.top}%`
+                        }}
+                        onClick={() => selectRebindSourceKey(key)}
+                      >
+                        {key.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+          </>
+        )}
       </main>
     </div>
   );
