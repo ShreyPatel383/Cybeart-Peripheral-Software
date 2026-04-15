@@ -1,0 +1,19 @@
+# Node
+node_modules/
+dist/
+npm-debug.log*
+
+# Tauri / Rust
+target/
+**/target/
+*.pdb
+
+# Env / IDE
+.env
+.env.*
+.vscode/
+.cursor/
+
+# OS
+.DS_Store
+Thumbs.db
