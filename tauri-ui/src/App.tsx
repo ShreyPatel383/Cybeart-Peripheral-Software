@@ -153,7 +153,7 @@ const KEY_POSITION_OVERRIDES: Record<string, { left: number; top: number }> = {
   Period: { left: 62.9231, top: 67.2747 },
   Slash: { left: 68.6154, top: 67.2747 },
   RShift: { left: 74.3077, top: 67.2747 },
-  Up: { left: 85.944, top: 65.2747 },
+  Up: { left: 85.944, top: 69.4498 },
   LCtrl: { left: 3.07692, top: 80.3222 },
   LWin: { left: 10.5524, top: 80.3222 },
   LAlt: { left: 17.5735, top: 80.3222 },
