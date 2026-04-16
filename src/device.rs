@@ -3,8 +3,11 @@
 //! Protocol: HID feature reports, interface 1 (usage_page 0xFF00)
 //! Packet sequence per lighting command: 0x0a → 0x84 → 0x84b → 0x04
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use hidapi::{HidApi, HidDevice};
+use std::sync::{Mutex, OnceLock};
+
+use crate::layout::KEYS;
 
 pub const VID:         u16 = 0x258A;
 pub const PID:         u16 = 0x010C;
@@ -174,6 +177,18 @@ pub const TEMPLATE_06: [u8; 520] = [
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 ];
 
+/// Key remap packet. Payload is a 96-entry big-endian keymap table indexed by LED slot.
+pub const TEMPLATE_03: [u8; 520] = {
+    let mut packet = [0u8; 520];
+    packet[0] = 0x06;
+    packet[1] = 0x03;
+    packet[4] = 0x01;
+    packet[7] = 0x02;
+    packet[518] = 0x5A;
+    packet[519] = 0xA5;
+    packet
+};
+
 // ── Dynamic field offsets ──────────────────────────────────────────────────
 
 /// Effect ID byte in TEMPLATE_04 and TEMPLATE_84B.
@@ -184,6 +199,44 @@ pub const OFF_EFFECT: usize = 0x12;
 pub const PERKEY_EFFECT_ID:  u8    = 0x15;
 pub const PERKEY_DATA_START: usize = 0x008;
 pub const PERKEY_PLANE_SIZE: usize = 126;
+
+const DEFAULT_KEYMAP: [u32; 96] = [
+    0x00000029, 0x00000035, 0x0000002B, 0x00000039, 0x00020000, 0x00010000, 0x00000000, 0x0000001E,
+    0x00000014, 0x00000004, 0x0000001D, 0x00080000, 0x0000003A, 0x0000001F, 0x0000001A, 0x00000016,
+    0x0000001B, 0x00040000, 0x0000003B, 0x00000020, 0x00000008, 0x00000007, 0x00000006, 0x00000000,
+    0x0000003C, 0x00000021, 0x00000015, 0x00000009, 0x00000019, 0x00000000, 0x0000003D, 0x00000022,
+    0x00000017, 0x0000000A, 0x00000005, 0x0000002C, 0x0000003E, 0x00000023, 0x0000001C, 0x0000000B,
+    0x00000011, 0x00000000, 0x0000003F, 0x00000024, 0x00000018, 0x0000000D, 0x00000010, 0x00000000,
+    0x00000040, 0x00000025, 0x0000000C, 0x0000000E, 0x00000036, 0x00400000, 0x00000041, 0x00000026,
+    0x00000012, 0x0000000F, 0x00000037, 0x0D000000, 0x00000042, 0x00000027, 0x00000013, 0x00000033,
+    0x00000038, 0x00100000, 0x00000043, 0x0000002D, 0x0000002F, 0x00000034, 0x00000000, 0x00000000,
+    0x00000044, 0x0000002E, 0x00000030, 0x00000000, 0x00000000, 0x00000000, 0x00000045, 0x0000002A,
+    0x00000031, 0x00000028, 0x00200000, 0x00000050, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+    0x00000052, 0x00000051, 0x07000014, 0x0000004C, 0x0000004D, 0x0000004B, 0x0000004E, 0x0000004F
+];
+
+fn active_keymap() -> &'static Mutex<[u32; 96]> {
+    static KEYMAP: OnceLock<Mutex<[u32; 96]>> = OnceLock::new();
+    KEYMAP.get_or_init(|| Mutex::new(DEFAULT_KEYMAP))
+}
+
+fn encode_remap_packet(map: &[u32; 96]) -> [u8; 520] {
+    let mut packet = TEMPLATE_03;
+    for (index, value) in map.iter().enumerate() {
+        let offset = 8 + index * 4;
+        packet[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
+    }
+    packet
+}
+
+fn usage_value_for_vk(vk: u16) -> Option<u32> {
+    if vk == 0 {
+        return Some(0);
+    }
+    KEYS.iter()
+        .find(|key| key.vk == vk)
+        .map(|key| DEFAULT_KEYMAP[key.led_index as usize])
+}
 
 /// Brightness offset for an effect in the speed/brt table.
 /// Formula confirmed from breathing (hw=2→0x044) and snake (hw=11→0x056) captures.
@@ -412,7 +465,21 @@ impl Keyboard {
         Ok(())
     }
 
-    pub fn remap_key(&self, _from_led: u8, _to_vk: u16) -> Result<()> {
-        anyhow::bail!("remap_key: not yet confirmed from capture.")
+    pub fn remap_key(&self, from_led: u8, to_vk: u16) -> Result<()> {
+        let from_index = from_led as usize;
+        if from_index >= DEFAULT_KEYMAP.len() {
+            anyhow::bail!("remap_key: LED index out of range: {}", from_led);
+        }
+        let to_value = usage_value_for_vk(to_vk)
+            .ok_or_else(|| anyhow!("remap_key: unsupported VK code 0x{:04X}", to_vk))?;
+
+        let mut map = active_keymap()
+            .lock()
+            .map_err(|_| anyhow!("remap_key: keymap mutex poisoned"))?;
+        map[from_index] = to_value;
+
+        let pkt03 = encode_remap_packet(&map);
+        self.send(&pkt03)?;
+        Ok(())
     }
 }
